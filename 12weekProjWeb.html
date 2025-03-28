@@ -81,11 +81,27 @@
     const stopBtn = document.getElementById('stopButton');
     const modeStatus = document.getElementById('modeStatus');
 
+    const robotEl = document.getElementById('robotEl')
+
     const ip = '192.168.8.104';
     const port = 9012;
 
     nameInput.value = "omega";
 
+    // make odom topic
+    const odomTopic = new ROSLIB.Topic({
+        ros:ros,
+        name: `/${name}/odom`,
+        messageType: 'nav_msgs/Odometry'
+        });
+
+        // make odom subscriber
+    odomTopic.subscribe((msg)=>{
+        const pos = msg.pose.pose.position;
+        // move our robot to the new x,y
+        const scale = 50
+        robotEl.style.transform = `translate(${scale * pos.x}px, ${scale * pos.y}px)`
+            })
    
     function publishMode() {
     if (ros && ros.isConnected) {
@@ -132,8 +148,6 @@
             //Sending the mode (auto, manual) and robot name 
         })
         console.log("ROS topic initialized:", `/${robotName}/web_to_python`);
-
-
         });
     })
 
@@ -162,8 +176,6 @@
         publishMode();
         clearInterval(timerInterval);
     });
-
-
 
         // Move forward publisher
     forwardArrow.addEventListener('click', () => {
