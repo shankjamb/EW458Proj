@@ -141,6 +141,8 @@ class RobotController:
             elif self.front_act_reflect > 100:
                 print("Object nearby, reducing speed.")
                 linear_speed = 0.1  
+            else:
+                linear_speed = 0.2
 
             # Publish movement command
             drive = {"linear": {"x": linear_speed}, "angular": {"z": z_angular}}
