@@ -53,6 +53,10 @@ class RobotController:
         self.kd = 0.002  # PD controller derivative gain
         self.prev_error = 0.0
 
+        self.z_angular = 0.0
+        self.current_error = 0.0  
+        self.linear_speed = 0.3
+
         self.wall_mode = "center" #default driving mode
 
         # Dictionaries for different colors
@@ -103,11 +107,9 @@ class RobotController:
         while True:
             try:
                 if self.drive_mode == 'manual':
-                    print("Manual Light!")
                     msg_data = [{'override_system': True, 'leds': self.led_yellow},
                                 {'override_system': True, 'leds': self.led_off}]
                 elif self.drive_mode == 'autonomous':
-                    print("Autonomous Light!")
                     msg_data = [{'override_system': True, 'leds': self.led_blue},
                                 {'override_system': True, 'leds': self.led_off}]
 
@@ -129,9 +131,7 @@ class RobotController:
 
             elif self.drive_mode == "autonomous":
                 # PD controller variables
-                z_angular = 0.0  
-                current_error = 0.0  
-                linear_speed = 0.4
+                
 
                 #determine wall mode based on if see walls or not
                 if self.right_act_reflect and self.left_act_reflect:
@@ -145,39 +145,35 @@ class RobotController:
 
                 # Compute error for PD control
                 if self.wall_mode == "right":
-                    print("Right Wall Following!")
-                    current_error = self.right_act_reflect - self.right_des_reflect
+                    print("Right Wall Following! 👉")
+                    self.current_error = self.right_act_reflect - self.right_des_reflect
                 elif self.wall_mode == "left":
-                    print("Left Wall Following!")
-                    current_error = self.left_des_reflect - self.left_act_reflect
+                    print("Left Wall Following! 👈")
+                    self.current_error = self.left_des_reflect - self.left_act_reflect
                 elif self.wall_mode == "center":
-                    print("Staying in the Center!")
-                    current_error = self.right_act_reflect - self.left_act_reflect
+                    print("Staying in the Center! 🫵")
+                    self.current_error = self.right_act_reflect - self.left_act_reflect
 
                 # Compute derivative term
-                derivative = (current_error - self.prev_error) / 0.1  
+                derivative = (self.current_error - self.prev_error) / 0.1  
 
                 # PD control equation
-                z_angular = (self.kp * current_error) + (self.kd * derivative)
+                self.z_angular = (self.kp * self.current_error) + (self.kd * derivative)
 
                 # Obstacle avoidance
-                if (self.front_act_reflect > 300 or self.front_right_act_reflect > 300 or self.front_left_act_reflect > 300):
+                if (self.front_act_reflect > 100 or self.front_right_act_reflect > 100 or self.front_left_act_reflect > 100):
                     print("Obstacle detected! Slowing down.")
-                    linear_speed = 0.05
-                    z_angular = 0.4  
-                # elif self.front_act_reflect or self.front_right_act_reflect or self.front_left_act_reflect> 150:
-                #     print("Object nearby, reducing speed.")
-                #     linear_speed = 0.1  
-                #     z_angular = 0.4
+                    self.linear_speed = 0#0.05
+                    self.z_angular = 0.4  
                 else:
-                    linear_speed = 0.4
+                    self.linear_speed = 0.3
 
                 # Publish movement command
-                print(f"Linear speed: {linear_speed}, angular speed: {z_angular}")
-                drive = {"linear": {"x": linear_speed}, "angular": {"z": z_angular}}
+                print(f"Linear speed: {self.linear_speed}, angular speed: {self.z_angular}")
+                drive = {"linear": {"x": self.linear_speed}, "angular": {"z": self.z_angular}}
                 self.vel_topic.publish(roslibpy.Message(drive))
 
-                self.prev_error = current_error
+                self.prev_error = self.current_error
                 sleep(0.1)  # Keep loop running in autonomous mode
 
     def start_threads(self):
