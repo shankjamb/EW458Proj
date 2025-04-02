@@ -16,7 +16,7 @@ class RobotController:
         print(f"Connection: {self.ros.is_connected}")
 
         # Define robot
-        self.robot_name = 'echo'
+        self.robot_name = 'bravo'
 
         # Define driving mode for robot
         self.drive_mode = "manual"
@@ -53,8 +53,7 @@ class RobotController:
         self.kd = 0.002  # PD controller derivative gain
         self.prev_error = 0.0
 
-        self.wall_mode = "center"
-        self.mode_lock_counter = 0  # Prevents rapid switching
+        self.wall_mode = "center" #default driving mode
 
         # Dictionaries for different colors
         self.led_yellow = [{'red': 255, 'green': 255, 'blue': 0} for _ in range(6)]
@@ -78,6 +77,10 @@ class RobotController:
         self.left_act_reflect = message['readings'][0]['value']
         self.right_act_reflect = message['readings'][6]['value']
         self.front_act_reflect = message['readings'][3]['value']
+        self.front_left_act_reflect = message['readings'][2]['value']
+        self.front_right_act_reflect = message['readings'][4]['value']
+        #print(self.front_act_reflect, self.front_left_act_reflect, self.front_right_act_reflect)
+
 
     def js_callback(self, message):
         """Handles messages from the JavaScript frontend."""
@@ -114,85 +117,68 @@ class RobotController:
                     sleep(0.1)
             except:
                 print('Problem with light loop!**************************')
-
+                
 
     def drive_loop(self):
-        #"""Main driving loop using a PD controller with obstacle avoidance."""
-        
-        linear_speed = 0.4  # Default speed
-        last_known_error = 0.0  # Store last valid error when walls are missing
-        
+        """Main driving loop using a PD controller with obstacle avoidance."""
+    
         while True:
             if self.drive_mode == "manual":
                 sleep(0.1)
                 continue
 
             elif self.drive_mode == "autonomous":
-                z_angular = 0.0  # Initialize steering correction
-                current_error = 0.0  # Reset error each loop
+                # PD controller variables
+                z_angular = 0.0  
+                current_error = 0.0  
+                linear_speed = 0.4
 
-                # Wall detection
-                left_detected = self.left_act_reflect > 0
-                right_detected = self.right_act_reflect > 0
+                #determine wall mode based on if see walls or not
+                if self.right_act_reflect and self.left_act_reflect:
+                    self.wall_mode = "center"
+                elif  self.right_act_reflect:
+                    self.wall_mode = "right"
+                elif self.left_act_reflect:
+                    self.wall_mode = "left"
+                elif self.right_act_reflect and self.left_act_reflect==0:
+                    self.wall_mode = "center"
 
                 # Compute error for PD control
-                if left_detected and right_detected:
-                    # Stay centered between walls
-                    print("Center Tracking Mode")
-                    current_error = self.right_act_reflect - self.left_act_reflect
-                elif left_detected:
-                    # Follow left wall
-                    print("Left Wall Following")
-                    current_error = self.left_des_reflect - self.left_act_reflect
-                elif right_detected:
-                    # Follow right wall
-                    print("Right Wall Following")
+                if self.wall_mode == "right":
+                    print("Right Wall Following!")
                     current_error = self.right_act_reflect - self.right_des_reflect
-                else:
-                    # No walls detected, maintain last known error
-                    print("No walls detected, maintaining last correction")
-                    current_error = last_known_error
+                elif self.wall_mode == "left":
+                    print("Left Wall Following!")
+                    current_error = self.left_des_reflect - self.left_act_reflect
+                elif self.wall_mode == "center":
+                    print("Staying in the Center!")
+                    current_error = self.right_act_reflect - self.left_act_reflect
 
-                # Save last known error if valid
-                if left_detected or right_detected:
-                    last_known_error = current_error
-
-                # Compute derivative term for PD controller
+                # Compute derivative term
                 derivative = (current_error - self.prev_error) / 0.1  
-                
+
                 # PD control equation
                 z_angular = (self.kp * current_error) + (self.kd * derivative)
 
-                # Obstacle avoidance with maneuvering
-                if self.front_act_reflect > 200:
-                    print("Obstacle detected! Steering around it.")
+                # Obstacle avoidance
+                if (self.front_act_reflect > 300 or self.front_right_act_reflect > 300 or self.front_left_act_reflect > 300):
+                    print("Obstacle detected! Slowing down.")
                     linear_speed = 0.05
-                    
-                    if self.left_act_reflect < self.right_act_reflect:
-                        z_angular = 0.5  # Turn left
-                    else:
-                        z_angular = -0.5  # Turn right
-                elif self.front_act_reflect > 100:
-                    print("Object nearby, reducing speed and preparing to turn.")
-                    linear_speed = 0.1  
-                    
-                    if self.left_act_reflect < self.right_act_reflect:
-                        z_angular = 0.3  # Slight left turn
-                    else:
-                        z_angular = -0.3  # Slight right turn
+                    z_angular = 0.4  
+                # elif self.front_act_reflect or self.front_right_act_reflect or self.front_left_act_reflect> 150:
+                #     print("Object nearby, reducing speed.")
+                #     linear_speed = 0.1  
+                #     z_angular = 0.4
                 else:
                     linear_speed = 0.4
 
                 # Publish movement command
+                print(f"Linear speed: {linear_speed}, angular speed: {z_angular}")
                 drive = {"linear": {"x": linear_speed}, "angular": {"z": z_angular}}
                 self.vel_topic.publish(roslibpy.Message(drive))
 
                 self.prev_error = current_error
                 sleep(0.1)  # Keep loop running in autonomous mode
-
-                
-
-    
 
     def start_threads(self):
         print(f'Starting {len(self.threads)} threads!')
