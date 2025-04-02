@@ -114,78 +114,72 @@ class RobotController:
                     sleep(0.1)
             except:
                 print('Problem with light loop!**************************')
-                
+
 
     def drive_loop(self):
-        """Main driving loop using a PD controller with obstacle avoidance."""
+        #"""Main driving loop using a PD controller with obstacle avoidance."""
         
-        left_wall_missing_counter = 0
-        right_wall_missing_counter = 0
-        switch_threshold = 5  # Number of iterations before switching wall-following mode
-
+        linear_speed = 0.4  # Default speed
+        last_known_error = 0.0  # Store last valid error when walls are missing
+        
         while True:
             if self.drive_mode == "manual":
                 sleep(0.1)
                 continue
 
             elif self.drive_mode == "autonomous":
-                # PD controller variables
-                z_angular = 0.0  
-                current_error = 0.0  
-                linear_speed = 0.4
+                z_angular = 0.0  # Initialize steering correction
+                current_error = 0.0  # Reset error each loop
 
-                # Detect if a wall is missing
-                left_missing = self.left_act_reflect == 0
-                right_missing = self.right_act_reflect == 0
-
-                # Track how long a wall is missing
-                if right_missing:
-                    right_wall_missing_counter += 1
-                else:
-                    right_wall_missing_counter = 0  # Reset if wall detected
-
-                if left_missing:
-                    left_wall_missing_counter += 1
-                else:
-                    left_wall_missing_counter = 0  # Reset if wall detected
-
-                # Determine wall mode (switch only if missing for some time)
-                if self.wall_mode == "right" and right_wall_missing_counter > switch_threshold:
-                    print("Switching to Left Wall Following!")
-                    self.wall_mode = "left"
-                    right_wall_missing_counter = 0  # Reset counter after switching
-
-                elif self.wall_mode == "left" and left_wall_missing_counter > switch_threshold:
-                    print("Switching to Right Wall Following!")
-                    self.wall_mode = "right"
-                    left_wall_missing_counter = 0  # Reset counter after switching
+                # Wall detection
+                left_detected = self.left_act_reflect > 0
+                right_detected = self.right_act_reflect > 0
 
                 # Compute error for PD control
-                if self.wall_mode == "right":
-                    print("Right Wall Following!")
-                    current_error = self.right_act_reflect - self.right_des_reflect
-                elif self.wall_mode == "left":
-                    print("Left Wall Following!")
-                    current_error = self.left_des_reflect - self.left_act_reflect
-                elif self.wall_mode == "center":
-                    print("Staying in the Center!")
+                if left_detected and right_detected:
+                    # Stay centered between walls
+                    print("Center Tracking Mode")
                     current_error = self.right_act_reflect - self.left_act_reflect
+                elif left_detected:
+                    # Follow left wall
+                    print("Left Wall Following")
+                    current_error = self.left_des_reflect - self.left_act_reflect
+                elif right_detected:
+                    # Follow right wall
+                    print("Right Wall Following")
+                    current_error = self.right_act_reflect - self.right_des_reflect
+                else:
+                    # No walls detected, maintain last known error
+                    print("No walls detected, maintaining last correction")
+                    current_error = last_known_error
 
-                # Compute derivative term
+                # Save last known error if valid
+                if left_detected or right_detected:
+                    last_known_error = current_error
+
+                # Compute derivative term for PD controller
                 derivative = (current_error - self.prev_error) / 0.1  
-
+                
                 # PD control equation
                 z_angular = (self.kp * current_error) + (self.kd * derivative)
 
-                # Obstacle avoidance
+                # Obstacle avoidance with maneuvering
                 if self.front_act_reflect > 200:
-                    print("Obstacle detected! Slowing down.")
+                    print("Obstacle detected! Steering around it.")
                     linear_speed = 0.05
-                    z_angular = 0.4  
+                    
+                    if self.left_act_reflect < self.right_act_reflect:
+                        z_angular = 0.5  # Turn left
+                    else:
+                        z_angular = -0.5  # Turn right
                 elif self.front_act_reflect > 100:
-                    print("Object nearby, reducing speed.")
+                    print("Object nearby, reducing speed and preparing to turn.")
                     linear_speed = 0.1  
-                    z_angular = 0.2
+                    
+                    if self.left_act_reflect < self.right_act_reflect:
+                        z_angular = 0.3  # Slight left turn
+                    else:
+                        z_angular = -0.3  # Slight right turn
                 else:
                     linear_speed = 0.4
 
@@ -195,6 +189,10 @@ class RobotController:
 
                 self.prev_error = current_error
                 sleep(0.1)  # Keep loop running in autonomous mode
+
+                
+
+    
 
     def start_threads(self):
         print(f'Starting {len(self.threads)} threads!')
