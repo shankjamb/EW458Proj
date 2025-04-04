@@ -16,7 +16,7 @@ class RobotController:
         print(f"Connection: {self.ros.is_connected}")
 
         # Define robot
-        self.robot_name = 'bravo'
+        self.robot_name = 'echo'
 
         # Define driving mode for robot
         self.drive_mode = "manual"
@@ -161,10 +161,21 @@ class RobotController:
                 self.z_angular = (self.kp * self.current_error) + (self.kd * derivative)
 
                 # Obstacle avoidance
+                # Obstacle avoidance - smooth slowdown
+                # max_ir = max(self.front_act_reflect, self.front_right_act_reflect, self.front_left_act_reflect)
+
+                # if max_ir > 100:
+                #     print("Obstacle detected! Slowing down.")
+                #     # Linearly decrease speed based on intensity, but clamp to a safe minimum
+                #     self.linear_speed = max(0.1, 0.3 - 0.002 * (max_ir - 100))
+                #     self.z_angular = min(self.z_angular + 0.2, 0.4)  # encourage slight turn
+                # else:
+                #     self.linear_speed = 0.3
+
                 if (self.front_act_reflect > 100 or self.front_right_act_reflect > 100 or self.front_left_act_reflect > 100):
                     print("Obstacle detected! Slowing down.")
-                    self.linear_speed = 0#0.05
-                    self.z_angular = 0.4  
+                    self.linear_speed = 0.01
+                    self.z_angular = 0.3  
                 else:
                     self.linear_speed = 0.3
 
@@ -186,4 +197,4 @@ if __name__ == "__main__":
     robot.start_threads()
     while 1:
         sleep(0.1)
-        
+    
