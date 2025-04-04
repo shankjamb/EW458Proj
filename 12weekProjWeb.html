@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Robot Control Panel</title>
-</head>
     <style>
         body {
             font-family: sans-serif;
@@ -52,10 +51,11 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        transform: translate(0px, 0px);
+        transform: translate(-50%, -50%); /* Center the dot initially */
     }
 
     </style>
+</head>
 
 <body>
     <div class="container">
@@ -70,182 +70,175 @@
             <button class="dirBtn" id="leftButton">⬅️ </button>
             <button class="dirBtn" id="forwardButton">⬆️</button>
             <button class="dirBtn" id="rightButton">➡️</button>
-          </div>
+        </div>
         <button id="autonomousButton">Autonomous</button>
         <button id="manualButton">Manual</button>
         <button id="stopButton">Stop</button>
         <p>Timer: <span id="timer">0.00</span> sec</p>
 
-
         <div id="odom-box">
             <div id="robot-dot"></div>
-          </div>
+        </div>
     </div>
-</body>
 
-<script src="roslibjs.js"></script>
-<script>
-    console.clear()
+    <script src="roslibjs.js"></script>
+    <script>
+        console.clear()
 
-    let timer = 0;
-    let timerInterval;
-    let ros = undefined;
-    let cmdvelTopic; 
-    let mode = 'manual'
-    let web_to_python_topic;
+        let timer = 0;
+        let timerInterval;
+        let ros = undefined;
+        let cmdvelTopic;
+        let mode = 'manual'
+        let web_to_python_topic;
 
-    const titleName = document.getElementById('robotName');
-    const nameInput = document.getElementById('inputField');
-    const connBtn = document.getElementById('connectButton');
-    const connectionStatus = document.getElementById('statusText');
-    const timerDisplay = document.getElementById("timer");
-    const leftArrow = document.getElementById('leftButton');
-    const rightArrow = document.getElementById('rightButton');
-    const forwardArrow = document.getElementById('forwardButton');
+        const titleName = document.getElementById('robotName');
+        const nameInput = document.getElementById('inputField');
+        const connBtn = document.getElementById('connectButton');
+        const connectionStatus = document.getElementById('statusText');
+        const timerDisplay = document.getElementById("timer");
 
-    const autonomousBtn = document.getElementById('autonomousButton');
-    const manualBtn = document.getElementById('manualButton');
-    const stopBtn = document.getElementById('stopButton');
-    const modeStatus = document.getElementById('modeStatus');
+        const leftArrow = document.getElementById('leftButton');
+        const rightArrow = document.getElementById('rightButton');
+        const forwardArrow = document.getElementById('forwardButton');
 
+        const autonomousBtn = document.getElementById('autonomousButton');
+        const manualBtn = document.getElementById('manualButton');
+        const stopBtn = document.getElementById('stopButton');
 
+        const robotEl = document.getElementById('robot-dot');
+        const scale = 50; // Scale factor to exaggerate position for visibility
 
-    const ip = '192.168.8.104';
-    const port = 9012;
+        let rosConnected = false;
 
-    nameInput.value = "omega";
+        // Function to publish the mode to ROS
+        function publishMode() {
+            if (ros && ros.isConnected) {
+                const robotName = nameInput.value; // Get the robot name
+                const modeMessage = new ROSLIB.Message({ data: `${mode},${robotName}` }); // Send "mode,robot_name"
+                web_to_python_topic.publish(modeMessage);
+                console.log(`Published mode: ${mode}, Robot Name: ${robotName}`);
+            } else {
+                console.warn("ROS is not connected. Cannot publish mode.");
+            }
+        }
 
+        connBtn.addEventListener('click', () => {
+            const robotName = nameInput.value;
+            console.log("Robot Name: ", robotName);
+            
+            // Update the title to the robot's name
+            titleName.textContent = robotName;
 
-    const robotEl = document.getElementById('robot-dot');
-    const scale = 50; // scale to exaggerate position for visibility
-
-
-
-    // make odom topic
-    const odomTopic = new ROSLIB.Topic({
-        ros:ros,
-        name: `/${name}/odom`,
-        messageType: 'nav_msgs/Odometry'
-        });
-
-    odomTopic.subscribe((msg) => {
-        const pos = msg.pose.pose.position;
-
-        // Use transform to move the robot dot
-        const x = pos.x * scale;
-        const y = -pos.y * scale; // invert Y axis for display
-
-        robotEl.style.transform = `translate(${x}px, ${y}px)`;
-    });
-
-   
-    function publishMode() {
-    if (ros && ros.isConnected) {
-        const robotName = nameInput.value; // Get the robot name
-        const modeMessage = new ROSLIB.Message({ data: `${mode},${robotName}` }); // Send "mode,robot_name"
-        web_to_python_topic.publish(modeMessage);
-        console.log(`Published mode: ${mode}, Robot Name: ${robotName}`);
-    } else {
-        console.warn("ROS is not connected. Cannot publish mode.");
-    }
-    }
-
-    connBtn.addEventListener('click', () => {
-        const robotName = nameInput.value;
-        console.log("Robot Name: ", robotName);
-        
-        // Update the title to the robot's name
-        titleName.textContent = robotName;
-
-        // Create the ROS instance and establish a connection
-        ros = new ROSLIB.Ros({
-            url: `ws://${ip}:${port}`
-        });
-
-        // Handle connection
-        ros.on('connection', () => {
-            console.log('Connected to ROS');
-            connectionStatus.textContent = "Connected";
-            connectionStatus.style.color = 'green';
-
-
-            // Initialize the cmd_vel topic once connected
-        cmdvelTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: `/${robotName}/cmd_vel`,
-            messageType: 'geometry_msgs/Twist'
-
+            // Create the ROS instance and establish a connection
+            ros = new ROSLIB.Ros({
+                url: `ws://192.168.8.104:9012`
             });
 
-        web_to_python_topic = new ROSLIB.Topic({
-            ros:ros,
-            name:  `/${robotName}/web_to_python`,
-            messageType: 'std_msgs/String'
-            //Sending the mode (auto, manual) and robot name 
-        })
-        console.log("ROS topic initialized:", `/${robotName}/web_to_python`);
+            ros.on('connection', () => {
+                console.log('Connected to ROS');
+                connectionStatus.textContent = "Connected";
+                connectionStatus.style.color = 'green';
+
+                // Initialize the cmd_vel topic once connected
+                cmdvelTopic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/${robotName}/cmd_vel`,
+                    messageType: 'geometry_msgs/Twist'
+                });
+
+                web_to_python_topic = new ROSLIB.Topic({
+                    ros: ros,
+                    name: `/${robotName}/web_to_python`,
+                    messageType: 'std_msgs/String'
+                });
+                console.log("ROS topic initialized:", `/${robotName}/web_to_python`);
+            });
+
+            // Handle odom topic to update the position of the robot dot
+            const odomTopic = new ROSLIB.Topic({
+                ros: ros,
+                name: `/${robotName}/odom`,
+                messageType: 'nav_msgs/Odometry'
+            });
+
+            odomTopic.subscribe((msg) => {
+                const pos = msg.pose.pose.position;
+
+                // Scale the robot position to the odom-box
+                let x = pos.x * scale;
+                let y = -pos.y * scale; // Invert Y axis for proper orientation
+
+                // Constrain robot's position inside the box
+                const boxWidth = document.getElementById('odom-box').offsetWidth;
+                const boxHeight = document.getElementById('odom-box').offsetHeight;
+
+                // Ensure the dot stays within the bounds of the odom-box
+                x = Math.max(0, Math.min(x, boxWidth - robotEl.offsetWidth));
+                y = Math.max(0, Math.min(y, boxHeight - robotEl.offsetHeight));
+
+                // Update the robot dot position
+                robotEl.style.transform = `translate(${x}px, ${y}px)`;
+            });
         });
-    })
 
-    document.getElementById("autonomousButton").addEventListener("click", () => {
-        mode = "autonomous";
-        publishMode();  
-        clearInterval(timerInterval);
-        timer = 0;
-        timerDisplay.textContent = timer.toFixed(2);
-        timerInterval = setInterval(() => {
-            timer += 0.01;
+        // Mode buttons
+        autonomousBtn.addEventListener("click", () => {
+            mode = "autonomous";
+            publishMode();
+            clearInterval(timerInterval);
+            timer = 0;
             timerDisplay.textContent = timer.toFixed(2);
-        }, 10);
+            timerInterval = setInterval(() => {
+                timer += 0.01;
+                timerDisplay.textContent = timer.toFixed(2);
+            }, 10);
+        });
 
-    });
+        manualBtn.addEventListener("click", () => {
+            mode = "manual";
+            publishMode();
+        });
 
-    // Manual button click - send "manual"
-    manualBtn.addEventListener("click", () => {
-        mode = "manual";
-        publishMode();
-    });
-
-    // Stop button click - send "manual"
-    stopBtn.addEventListener("click", () => {
-        mode = "manual";
-        publishMode();
-        clearInterval(timerInterval);
-    });
+        stopBtn.addEventListener("click", () => {
+            mode = "manual";
+            publishMode();
+            clearInterval(timerInterval);
+        });
 
         // Move forward publisher
-    forwardArrow.addEventListener('click', () => {
-        console.log('Forward Button Pressed');
-        if (cmdvelTopic) {
-            const twistMsg = new ROSLIB.Message({
-                linear: { x: 0.5 }
-            });
-            cmdvelTopic.publish(twistMsg);
-        }
-    });
+        forwardArrow.addEventListener('click', () => {
+            console.log('Forward Button Pressed');
+            if (cmdvelTopic) {
+                const twistMsg = new ROSLIB.Message({
+                    linear: { x: 0.5 }
+                });
+                cmdvelTopic.publish(twistMsg);
+            }
+        });
 
-    // Turn left publisher
-    leftArrow.addEventListener('click', () => {
-        console.log('Left Button Pressed');
-        if (cmdvelTopic) {
-            const twistMsg = new ROSLIB.Message({
-                angular: { z: 0.5 }
-            });
-            cmdvelTopic.publish(twistMsg);
-        }
-    });
+        // Turn left publisher
+        leftArrow.addEventListener('click', () => {
+            console.log('Left Button Pressed');
+            if (cmdvelTopic) {
+                const twistMsg = new ROSLIB.Message({
+                    angular: { z: 0.5 }
+                });
+                cmdvelTopic.publish(twistMsg);
+            }
+        });
 
-    // Turn right publisher
-    rightArrow.addEventListener('click', () => {
-        console.log('Right Button Pressed');
-        if (cmdvelTopic) {
-            const twistMsg = new ROSLIB.Message({
-                angular: { z: -0.5 }
-            });
-            cmdvelTopic.publish(twistMsg);
-        }
-    });
+        // Turn right publisher
+        rightArrow.addEventListener('click', () => {
+            console.log('Right Button Pressed');
+            if (cmdvelTopic) {
+                const twistMsg = new ROSLIB.Message({
+                    angular: { z: -0.5 }
+                });
+                cmdvelTopic.publish(twistMsg);
+            }
+        });
 
-
-</script>
+    </script>
+</body>
 </html>
